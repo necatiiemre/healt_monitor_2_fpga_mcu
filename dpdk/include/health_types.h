@@ -28,7 +28,7 @@
 #define HEALTH_PKT_SIZE_WITH_HEADER  1187  // Device header + 8 ports
 #define HEALTH_PKT_SIZE_8_PORTS      1083  // 8 ports (no header)
 #define HEALTH_PKT_SIZE_3_PORTS      438   // 3 ports
-#define HEALTH_PKT_SIZE_MCU          84    // MCU data
+#define HEALTH_PKT_SIZE_MCU          94    // MCU data
 
 // ==========================================
 // FPGA TYPES
@@ -37,7 +37,7 @@
 // Per-cycle packet ordering:
 //   pkt1 (1187) + pkt2 (1083) = Assistant FPGA  (16 ports)
 //   pkt3 (1187) + pkt4 (1083) + pkt5 (438) = Manager FPGA (19 ports)
-//   pkt6 (84) = MCU
+//   pkt6 (94) = MCU
 
 typedef enum {
     FPGA_TYPE_ASSISTANT = 0,
@@ -107,43 +107,54 @@ typedef enum {
 // MCU PAYLOAD OFFSETS (from UDP payload start)
 // ==========================================
 
-// Header fields
+// Header fields (12 bytes)
 #define MCU_OFF_DEVICE_ID            0    // 2 bytes
 #define MCU_OFF_OPERATION_TYPE       2    // 1 byte ('S' = 0x53)
 #define MCU_OFF_CONFIG_TYPE          3    // 1 byte ('D' = 0x44)
 #define MCU_OFF_DATA_LENGTH          4    // 2 bytes
 #define MCU_OFF_STATUS_ENABLE        6    // 1 byte
-#define MCU_OFF_FPGA_ADDRESS         7    // 1 byte
-#define MCU_OFF_RESERVED             8    // 2 bytes
+#define MCU_OFF_FW_VERSION_MAJOR     7    // 1 byte (MCU firmware major)
+#define MCU_OFF_FW_VERSION_MINOR     8    // 1 byte (MCU firmware minor)
+#define MCU_OFF_28V_POWER_STATUS     9    // 1 byte (28V input power status)
+#define MCU_OFF_COMPONENT_PBIT       10   // 1 byte (component status PBIT)
+#define MCU_OFF_COMPONENT_CBIT       11   // 1 byte (component status CBIT)
 
 // Current data (7 channels, 2 bytes each, divide by 1000 for Amps)
-#define MCU_OFF_12V_CURRENT          10   // 2 bytes
-#define MCU_OFF_3V3_CURRENT          12   // 2 bytes
-#define MCU_OFF_1V8_CURRENT          14   // 2 bytes
-#define MCU_OFF_3V3_FO_CURRENT       16   // 2 bytes (FO Transceiver)
-#define MCU_OFF_1V3_CURRENT          18   // 2 bytes
-#define MCU_OFF_1V0_MGR_CURRENT      20   // 2 bytes (1V0 DTN Manager FPGA)
-#define MCU_OFF_1V0_AST_CURRENT      22   // 2 bytes (1V0 DTN Assistant FPGA)
+#define MCU_OFF_12V_CURRENT          12   // 2 bytes
+#define MCU_OFF_3V3_CURRENT          14   // 2 bytes
+#define MCU_OFF_1V8_CURRENT          16   // 2 bytes
+#define MCU_OFF_3V3_FO_CURRENT       18   // 2 bytes (FO Transceiver)
+#define MCU_OFF_1V3_CURRENT          20   // 2 bytes
+#define MCU_OFF_1V0_MGR_CURRENT      22   // 2 bytes (1V0 DTN Manager FPGA)
+#define MCU_OFF_1V0_AST_CURRENT      24   // 2 bytes (1V0 DTN Assistant FPGA)
 
-// Voltage data (6 channels, 2 bytes each, divide by 1000 for Volts)
-#define MCU_OFF_3V3_VOLTAGE          24   // 2 bytes
-#define MCU_OFF_3V3_FO_VOLTAGE       26   // 2 bytes (FO Transceiver)
-#define MCU_OFF_12V_VOLTAGE          28   // 2 bytes
-#define MCU_OFF_1V8_VCCIO_VOLTAGE    30   // 2 bytes
-#define MCU_OFF_1V3_MGR_VOLTAGE      32   // 2 bytes (VDD DTN Manager FPGA)
-#define MCU_OFF_1V3_AST_VOLTAGE      34   // 2 bytes (VDD DTN Assistant FPGA)
+// Voltage data (7 channels, 2 bytes each, divide by 1000 for Volts)
+#define MCU_OFF_3V3_VOLTAGE          26   // 2 bytes (voltage divider)
+#define MCU_OFF_3V3_FO_VOLTAGE       28   // 2 bytes (FO Transceiver, voltage divider)
+#define MCU_OFF_12V_VOLTAGE          30   // 2 bytes (voltage divider)
+#define MCU_OFF_1V8_VCCIO_VOLTAGE    32   // 2 bytes (VCCIO 1V8 FPGA)
+#define MCU_OFF_1V3_VCC_VOLTAGE      34   // 2 bytes (VCC 1V3)
+#define MCU_OFF_1V0_MGR_VOLTAGE      36   // 2 bytes (VDD 1V0 Manager FPGA)
+#define MCU_OFF_1V0_AST_VOLTAGE      38   // 2 bytes (VDD 1V0 Assistant FPGA)
 
-// Temperature data (2 channels, 2 bytes each, divide by 100 for Celsius)
-#define MCU_OFF_CBA_TEMPERATURE      36   // 2 bytes
-#define MCU_OFF_FO_TEMPERATURE       38   // 2 bytes (FO Transceiver)
+// Temperature data (4 channels x 2 bytes, divide by 100 for Celsius)
+#define MCU_OFF_BOARD_TEMPERATURE    40   // 2 bytes (board temperature)
+#define MCU_OFF_FO1_TEMPERATURE      42   // 2 bytes (FO transceiver 1)
+#define MCU_OFF_FO2_TEMPERATURE      44   // 2 bytes (FO transceiver 2)
+#define MCU_OFF_FO3_TEMPERATURE      46   // 2 bytes (FO transceiver 3)
+
+// Temperature data (2 channels x 1 byte, direct Celsius value)
+#define MCU_OFF_ETH_PHY_1G_TEMP      48   // 1 byte (Ethernet PHY 1G)
+#define MCU_OFF_ETH_PHY_100M_TEMP    49   // 1 byte (Ethernet PHY 100M)
 
 // CRC (skip)
-#define MCU_OFF_CRC                  40   // 2 bytes
+#define MCU_OFF_CRC                  50   // 2 bytes
 
 // MCU data field counts
 #define MCU_CURRENT_CHANNELS         7
-#define MCU_VOLTAGE_CHANNELS         6
-#define MCU_TEMPERATURE_CHANNELS     2
+#define MCU_VOLTAGE_CHANNELS         7
+#define MCU_TEMPERATURE_2B_CHANNELS  4
+#define MCU_TEMPERATURE_1B_CHANNELS  2
 
 // ==========================================
 // PORT DATA OFFSETS (from port data start)
@@ -252,10 +263,10 @@ struct health_port_info {
 };
 
 /**
- * @brief MCU data (parsed from 84-byte response)
+ * @brief MCU data (parsed from 94-byte response)
  */
 struct health_mcu_info {
-    uint8_t  raw_data[84];        // Raw MCU packet data
+    uint8_t  raw_data[94];        // Raw MCU packet data
     bool     valid;               // MCU data received flag
 
     // Header
@@ -264,9 +275,13 @@ struct health_mcu_info {
     uint8_t  config_type;         // 'D' = 0x44
     uint16_t data_length;
     uint8_t  status_enable;
-    uint8_t  fpga_address;
+    uint8_t  fw_version_major;    // MCU firmware version major
+    uint8_t  fw_version_minor;    // MCU firmware version minor
+    uint8_t  power_status_28v;    // 28V input power status
+    uint8_t  component_pbit;      // Component status PBIT
+    uint8_t  component_cbit;      // Component status CBIT
 
-    // Current readings (raw uint16, divide by 1000 for Amps)
+    // Current readings (7 channels, raw uint16, divide by 1000 for Amps)
     uint16_t current_12v;             // 12V
     uint16_t current_3v3;             // 3V3
     uint16_t current_1v8;             // 1V8
@@ -275,17 +290,24 @@ struct health_mcu_info {
     uint16_t current_1v0_mgr;        // 1V0 DTN Manager FPGA
     uint16_t current_1v0_ast;        // 1V0 DTN Assistant FPGA
 
-    // Voltage readings (raw uint16, divide by 1000 for Volts)
-    uint16_t voltage_3v3;             // 3V3
-    uint16_t voltage_3v3_fo;          // 3V3 FO Transceiver
-    uint16_t voltage_12v;             // 12V
-    uint16_t voltage_1v8_vccio;       // 1V8 VCCIO
-    uint16_t voltage_1v3_mgr;        // 1V3 VDD DTN Manager FPGA
-    uint16_t voltage_1v3_ast;        // 1V3 VDD DTN Assistant FPGA
+    // Voltage readings (7 channels, raw uint16, divide by 1000 for Volts)
+    uint16_t voltage_3v3;             // 3V3 (voltage divider)
+    uint16_t voltage_3v3_fo;          // 3V3 FO Transceiver (voltage divider)
+    uint16_t voltage_12v;             // 12V (voltage divider)
+    uint16_t voltage_1v8_vccio;       // VCCIO 1V8 FPGA
+    uint16_t voltage_1v3_vcc;         // VCC 1V3
+    uint16_t voltage_1v0_mgr;        // VDD 1V0 Manager FPGA
+    uint16_t voltage_1v0_ast;        // VDD 1V0 Assistant FPGA
 
-    // Temperature readings (raw uint16, divide by 100 for Celsius)
-    uint16_t temp_cba;                // CBA Temperature
-    uint16_t temp_fo;                 // FO Transceiver Temperature
+    // Temperature readings (4 channels, raw uint16, divide by 100 for Celsius)
+    uint16_t temp_board;              // Board temperature
+    uint16_t temp_fo1;                // FO Transceiver 1 temperature
+    uint16_t temp_fo2;                // FO Transceiver 2 temperature
+    uint16_t temp_fo3;                // FO Transceiver 3 temperature
+
+    // Temperature readings (2 channels, raw uint8, direct Celsius)
+    uint8_t  temp_eth_phy_1g;         // Ethernet PHY 1G temperature
+    uint8_t  temp_eth_phy_100m;       // Ethernet PHY 100M temperature
 };
 
 /**
