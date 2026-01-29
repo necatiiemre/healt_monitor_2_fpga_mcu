@@ -179,6 +179,63 @@ static void parse_port_data(const uint8_t *port_data, struct health_port_info *p
 }
 
 // ==========================================
+// MCU DATA PARSING
+// ==========================================
+
+static void parse_mcu_data(const uint8_t *udp_payload, struct health_mcu_info *mcu)
+{
+    // Header
+    mcu->device_id       = parse_2byte_be(udp_payload + MCU_OFF_DEVICE_ID);
+    mcu->operation_type  = udp_payload[MCU_OFF_OPERATION_TYPE];
+    mcu->config_type     = udp_payload[MCU_OFF_CONFIG_TYPE];
+    mcu->data_length     = parse_2byte_be(udp_payload + MCU_OFF_DATA_LENGTH);
+    mcu->status_enable   = udp_payload[MCU_OFF_STATUS_ENABLE];
+    mcu->fpga_address    = udp_payload[MCU_OFF_FPGA_ADDRESS];
+
+    // Current readings (7 channels)
+    mcu->current_12v     = parse_2byte_be(udp_payload + MCU_OFF_12V_CURRENT);
+    mcu->current_3v3     = parse_2byte_be(udp_payload + MCU_OFF_3V3_CURRENT);
+    mcu->current_1v8     = parse_2byte_be(udp_payload + MCU_OFF_1V8_CURRENT);
+    mcu->current_3v3_fo  = parse_2byte_be(udp_payload + MCU_OFF_3V3_FO_CURRENT);
+    mcu->current_1v3     = parse_2byte_be(udp_payload + MCU_OFF_1V3_CURRENT);
+    mcu->current_1v0_mgr = parse_2byte_be(udp_payload + MCU_OFF_1V0_MGR_CURRENT);
+    mcu->current_1v0_ast = parse_2byte_be(udp_payload + MCU_OFF_1V0_AST_CURRENT);
+
+    // Voltage readings (6 channels)
+    mcu->voltage_3v3      = parse_2byte_be(udp_payload + MCU_OFF_3V3_VOLTAGE);
+    mcu->voltage_3v3_fo   = parse_2byte_be(udp_payload + MCU_OFF_3V3_FO_VOLTAGE);
+    mcu->voltage_12v      = parse_2byte_be(udp_payload + MCU_OFF_12V_VOLTAGE);
+    mcu->voltage_1v8_vccio = parse_2byte_be(udp_payload + MCU_OFF_1V8_VCCIO_VOLTAGE);
+    mcu->voltage_1v3_mgr  = parse_2byte_be(udp_payload + MCU_OFF_1V3_MGR_VOLTAGE);
+    mcu->voltage_1v3_ast  = parse_2byte_be(udp_payload + MCU_OFF_1V3_AST_VOLTAGE);
+
+    // Temperature readings (2 channels)
+    mcu->temp_cba = parse_2byte_be(udp_payload + MCU_OFF_CBA_TEMPERATURE);
+    mcu->temp_fo  = parse_2byte_be(udp_payload + MCU_OFF_FO_TEMPERATURE);
+
+    mcu->valid = true;
+}
+
+// ==========================================
+// MCU CONVERSION FUNCTIONS
+// ==========================================
+
+static inline double convert_mcu_current(uint16_t raw)
+{
+    return (double)raw / 1000.0;
+}
+
+static inline double convert_mcu_voltage(uint16_t raw)
+{
+    return (double)raw / 1000.0;
+}
+
+static inline double convert_mcu_temperature(uint16_t raw)
+{
+    return (double)raw / 100.0;
+}
+
+// ==========================================
 // RESPONSE PARSING (Assistant / Manager / MCU)
 // ==========================================
 
@@ -208,7 +265,7 @@ static void health_parse_response(const uint8_t *packet, size_t len, struct heal
     } else if (len == HEALTH_PKT_SIZE_MCU) {
         // 84 bytes: MCU data
         memcpy(cycle->mcu.raw_data, packet, len);
-        cycle->mcu.valid = true;
+        parse_mcu_data(udp_payload, &cycle->mcu);
         cycle->total_responses_received++;
         return;
     } else {
@@ -358,6 +415,52 @@ static void health_print_fpga_table(const char *fpga_name, const struct health_f
     }
 }
 
+static void health_print_mcu_table(const struct health_mcu_info *mcu)
+{
+    printf("[HEALTH] ============ MCU - Power & Thermal Status ============\n");
+
+    if (!mcu->valid) {
+        printf("[HEALTH] MCU: NOT RECEIVED\n");
+        return;
+    }
+
+    // Header info
+    printf("[HEALTH] DevID=0x%04X | OpType=0x%02X | CfgType=0x%02X | DataLen=%d\n",
+           mcu->device_id, mcu->operation_type, mcu->config_type, mcu->data_length);
+    printf("[HEALTH] StatusEnable=0x%02X | FPGAAddr=0x%02X\n",
+           mcu->status_enable, mcu->fpga_address);
+
+    // Current table
+    printf("[HEALTH] ---- Current Readings ----\n");
+    printf("[HEALTH]  Rail                        |   Raw  |  Value (A)\n");
+    printf("[HEALTH]  ----------------------------|--------|----------\n");
+    printf("[HEALTH]  12V                         | 0x%04X | %7.3f\n",  mcu->current_12v,     convert_mcu_current(mcu->current_12v));
+    printf("[HEALTH]  3V3                         | 0x%04X | %7.3f\n",  mcu->current_3v3,     convert_mcu_current(mcu->current_3v3));
+    printf("[HEALTH]  1V8                         | 0x%04X | %7.3f\n",  mcu->current_1v8,     convert_mcu_current(mcu->current_1v8));
+    printf("[HEALTH]  3V3 FO Transceiver          | 0x%04X | %7.3f\n",  mcu->current_3v3_fo,  convert_mcu_current(mcu->current_3v3_fo));
+    printf("[HEALTH]  1V3                         | 0x%04X | %7.3f\n",  mcu->current_1v3,     convert_mcu_current(mcu->current_1v3));
+    printf("[HEALTH]  1V0 DTN Manager FPGA        | 0x%04X | %7.3f\n",  mcu->current_1v0_mgr, convert_mcu_current(mcu->current_1v0_mgr));
+    printf("[HEALTH]  1V0 DTN Assistant FPGA       | 0x%04X | %7.3f\n",  mcu->current_1v0_ast, convert_mcu_current(mcu->current_1v0_ast));
+
+    // Voltage table
+    printf("[HEALTH] ---- Voltage Readings ----\n");
+    printf("[HEALTH]  Rail                        |   Raw  |  Value (V)\n");
+    printf("[HEALTH]  ----------------------------|--------|----------\n");
+    printf("[HEALTH]  3V3                         | 0x%04X | %7.3f\n",  mcu->voltage_3v3,       convert_mcu_voltage(mcu->voltage_3v3));
+    printf("[HEALTH]  3V3 FO Transceiver          | 0x%04X | %7.3f\n",  mcu->voltage_3v3_fo,    convert_mcu_voltage(mcu->voltage_3v3_fo));
+    printf("[HEALTH]  12V                         | 0x%04X | %7.3f\n",  mcu->voltage_12v,       convert_mcu_voltage(mcu->voltage_12v));
+    printf("[HEALTH]  1V8 VCCIO                   | 0x%04X | %7.3f\n",  mcu->voltage_1v8_vccio, convert_mcu_voltage(mcu->voltage_1v8_vccio));
+    printf("[HEALTH]  1V3 VDD DTN Manager FPGA    | 0x%04X | %7.3f\n",  mcu->voltage_1v3_mgr,   convert_mcu_voltage(mcu->voltage_1v3_mgr));
+    printf("[HEALTH]  1V3 VDD DTN Assistant FPGA   | 0x%04X | %7.3f\n",  mcu->voltage_1v3_ast,   convert_mcu_voltage(mcu->voltage_1v3_ast));
+
+    // Temperature table
+    printf("[HEALTH] ---- Temperature Readings ----\n");
+    printf("[HEALTH]  Sensor                      |   Raw  | Value (C)\n");
+    printf("[HEALTH]  ----------------------------|--------|----------\n");
+    printf("[HEALTH]  CBA                         | 0x%04X | %7.2f\n",  mcu->temp_cba, convert_mcu_temperature(mcu->temp_cba));
+    printf("[HEALTH]  FO Transceiver              | 0x%04X | %7.2f\n",  mcu->temp_fo,  convert_mcu_temperature(mcu->temp_fo));
+}
+
 static void health_print_tables(const struct health_cycle_data *cycle)
 {
     printf("\n");
@@ -370,14 +473,12 @@ static void health_print_tables(const struct health_cycle_data *cycle)
     // Manager FPGA Table
     health_print_fpga_table("MANAGER", &cycle->manager);
 
-    printf("[HEALTH] ================================================\n");
+    printf("[HEALTH] ================================================\n\n");
 
-    // MCU Status
-    if (cycle->mcu.valid) {
-        printf("[HEALTH] MCU: Data received (84 bytes)\n");
-    } else {
-        printf("[HEALTH] MCU: NOT RECEIVED\n");
-    }
+    // MCU Table
+    health_print_mcu_table(&cycle->mcu);
+
+    printf("[HEALTH] ================================================\n");
 
     printf("[HEALTH] Total responses: %d/%d\n",
            cycle->total_responses_received, HEALTH_MONITOR_EXPECTED_RESPONSES);
